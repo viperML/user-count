@@ -16,7 +16,7 @@ lib.fix (final: {
       ];
       config = {
         Cmd = [
-          "/bin/next-test"
+          "/bin/user-count"
         ];
         Env = [
           "PORT=${port}"
