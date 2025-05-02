@@ -61,12 +61,16 @@ executable user-count
     -- other-modules:
 
     -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    default-extensions:
+        , OverloadedStrings
+        , NumericUnderscores
 
     -- Other library packages from which modules are imported.
-    build-depends:    
+    build-depends:
         , base
         , warp
+        , wai
+        , http-types
 
     -- Directories containing source files.
     hs-source-dirs:   app

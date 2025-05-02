@@ -1,4 +1,6 @@
-with import <nixpkgs> { };
+with import <nixpkgs> {
+  config.allowUnfree = true;
+};
 {
   regular = mkShell {
     packages = [
@@ -6,6 +8,7 @@ with import <nixpkgs> { };
       haskellPackages.haskell-language-server
       haskellPackages.fast-tags
       haskellPackages.threadscope
+      nomad
     ];
   };
 
