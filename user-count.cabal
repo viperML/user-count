@@ -73,6 +73,7 @@ executable user-count
         , http-types
         , text
         , containers
+        , aeson
 
     -- Directories containing source files.
     hs-source-dirs:   app
