@@ -74,6 +74,7 @@ executable user-count
         , text
         , containers
         , aeson
+        , unbounded-delays
 
     -- Directories containing source files.
     hs-source-dirs:   app

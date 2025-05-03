@@ -6,11 +6,11 @@
 
 module Main where
 
-import Control.Concurrent (forkIO, newMVar, putMVar, readMVar, takeMVar, threadDelay)
+import Control.Concurrent (forkIO, newMVar, readMVar, withMVar)
 import Control.Concurrent.Chan
-import Control.Concurrent.MVar (MVar)
-import Control.Exception (bracket_)
-import Control.Monad (forever, void)
+import Control.Concurrent.MVar (modifyMVar_)
+import Control.Concurrent.Thread.Delay (delay)
+import Control.Monad (forever)
 import Data.Aeson
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -41,79 +41,83 @@ main :: IO ()
 main = do
     s <- settings
     channels <- stateHandler
-    devMode <- (Just "1" ==) <$> lookupEnv "DEV"
 
-    runSettings s (app channels (if devMode then seconds 5 else minutes 10))
+    runSettings s (app channels)
 
-data MyResponse = MyResponse
-    { activeUsers :: Int
-    }
-    deriving (Show, Generic)
-
-instance ToJSON MyResponse
-
-app :: Channels -> Int -> Application
-app (tx, rx) delay req respond = do
+app :: Channels -> Application
+app (tx, rx) req respond = do
     print req
     let headers = req.requestHeaders
     let x_forwarded_for = decodeUtf8 <$> lookup "X-Forwarded-For" headers
     let ip_source = T.replace "," "" <$> (listToMaybe . T.words =<< x_forwarded_for)
 
     case ip_source of
-        Just ip -> do
-            writeChan tx (PutIP ip)
-            void $ forkIO $ do
-                threadDelay delay
-                writeChan tx (DeleteIP ip)
-        Nothing -> putStrLn "X-Forwarded-For unset"
+        Just ip -> writeChan tx (PutIP ip)
+        Nothing -> return ()
 
-    writeChan tx TotalIP
-    total <- readChan rx
-
-    let r = MyResponse total
+    writeChan tx GetState
+    r <- readChan rx
 
     respond $ responseLBS status200 [("Access-Control-Allow-Origin", "*")] (encode r)
 
-seconds :: Int -> Int
+seconds :: (Num a) => a -> a
 seconds = (* 1_000_000)
 
-minutes :: Int -> Int
+minutes :: (Num a) => a -> a
 minutes = (* 60) . seconds
 
-type Channels = (Chan StateMsg, Chan Int)
+type Channels = (Chan Action, Chan AppState)
 
-data StateMsg = PutIP T.Text | DeleteIP T.Text | TotalIP
+data Action = PutIP T.Text | DeleteIP T.Text | DeleteIP24 T.Text | GetState
+
+data AppState = AppState
+    { activeUsers :: Int
+    , totalUsers :: Int
+    }
+    deriving (Show, Generic)
+
+instance ToJSON AppState
 
 stateHandler :: IO Channels
 stateHandler = do
-    rx :: Chan StateMsg <- newChan
-    tx :: Chan Int <- newChan
+    rx :: Chan Action <- newChan
+    tx :: Chan AppState <- newChan
+
+    devMode <- (Just "1" ==) <$> lookupEnv "DEV"
+    let shortDelay = if devMode then seconds 5 else minutes 30
+    let longDelay = if devMode then seconds 10 else minutes (24 * 60)
 
     ipMap <- newMVar (Map.empty :: Map Text Integer)
+    ip24Map <- newMVar (Map.empty :: Map Text ())
 
     _ <- forkIO $ forever $ do
         next <- readChan rx
         case next of
             PutIP ip -> do
-                old <- takeMVar ipMap
-                let value = fromMaybe 0 (Map.lookup ip old)
-                let new = Map.insert ip (value + 1) old
-                putMVar ipMap new
-            DeleteIP ip -> do
-                old <- takeMVar ipMap
-                let value = fromMaybe 0 (Map.lookup ip old)
-                case value of
-                    n | n > 1 -> do
-                        let new = Map.insert ip (value - 1) old
-                        putMVar ipMap new
-                    _ -> do
-                        let new = Map.delete ip old
-                        putMVar ipMap new
-            TotalIP -> do
-                old <- readMVar ipMap
-                let total = Map.size old
-                writeChan tx total
+                modifyMVar_ ipMap $ \m -> do
+                    _ <- forkIO $ delay shortDelay >> writeChan rx (DeleteIP ip)
+                    return $ Map.insertWith (+) ip 1 m
+                modifyMVar_ ip24Map $ \m ->
+                    if Map.member ip m
+                        then return m
+                        else do
+                            _ <- forkIO $ delay longDelay >> writeChan rx (DeleteIP24 ip)
+                            return $ Map.insert ip () m
+            DeleteIP ip -> modifyMVar_ ipMap $ \m ->
+                return $ Map.update (\n -> if n > 1 then Just (n - 1) else Nothing) ip m
+            DeleteIP24 ip -> modifyMVar_ ip24Map $ \m ->
+                return $ Map.delete ip m
+            GetState -> do
+                shortSize <- Map.size <$> readMVar ipMap
+                longSize <- Map.size <$> readMVar ip24Map
+                writeChan tx $ AppState shortSize longSize
 
-        readMVar ipMap >>= print
+                withMVar ipMap (putStrLn . showMap)
+                withMVar ip24Map (putStrLn . showMap)
 
     return (rx, tx)
+
+showMap :: (Show v, Show k) => Map k v -> String
+showMap m = "{\n" <> unlines (map showPair (Map.toList m)) <> "}"
+  where
+    showPair (k, v) = "  " <> show k <> ": " <> show v
