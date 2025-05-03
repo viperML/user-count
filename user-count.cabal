@@ -71,6 +71,8 @@ executable user-count
         , warp
         , wai
         , http-types
+        , text
+        , containers
 
     -- Directories containing source files.
     hs-source-dirs:   app
