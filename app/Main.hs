@@ -72,7 +72,7 @@ app (tx, rx) delay req respond = do
 
     let r = MyResponse total
 
-    respond $ responseLBS status200 [] (encode r)
+    respond $ responseLBS status200 [("Access-Control-Allow-Origin", "*")] (encode r)
 
 seconds :: Int -> Int
 seconds = (* 1_000_000)
