@@ -79,13 +79,19 @@ jobs:
       - name: Install Nomad
         uses: hashicorp/setup-nomad@main
 
+      - name: Install Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Request deployment to Nomad
         env:
-          NOMAD_ADDR: https://nomad.ayats.org
+          NOMAD_ADDR: http://shiva:4646
           NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
-          NOMAD_HTTP_AUTH: ${{ secrets.NOMAD_HTTP_AUTH }}
         run: |
           nomad run -var="tag=ghcr.io/${GITHUB_REPOSITORY@L}:${{ github.sha }}" ./app.nomad
