@@ -17,5 +17,5 @@ jobs:
       nix_docker_tag: user-count:latest
     secrets:
       ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-      ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
+      ts_oauth_client_secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
       nomad_token: ${{ secrets.NOMAD_TOKEN }}
